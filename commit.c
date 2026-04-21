@@ -208,6 +208,20 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     commit.timestamp = (uint64_t)time(NULL);
     snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
     snprintf(commit.message, sizeof(commit.message), "%s", message);
+    ObjectID parent_id;
+    if (head_read(&parent_id) == 0) {
+        commit.has_parent = 1;
+        commit.parent = parent_id;
+    } else {
+        // No parent — this is the first commit
+        commit.has_parent = 0;
+    }
+    void *commit_data;
+    size_t commit_len;
+    if (commit_serialize(&commit, &commit_data, &commit_len) != 0) {
+        fprintf(stderr, "error: failed to serialize commit\n");
+        return -1;
+    }
     (void)message; (void)commit_id_out;
     return -1;
 }
