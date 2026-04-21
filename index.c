@@ -270,7 +270,7 @@ int index_add(Index *index, const char *path) {
     }
     fclose(f);
  
-    // Step 2: Write blob to object store
+    
     ObjectID blob_id;
     if (object_write(OBJ_BLOB, contents, (size_t)file_size, &blob_id) != 0) {
         free(contents);
@@ -278,7 +278,7 @@ int index_add(Index *index, const char *path) {
     }
     free(contents);
  
-    // Step 3: Get file metadata (mtime, size, mode)
+    
     struct stat st;
     if (lstat(path, &st) != 0) return -1;
  
@@ -287,16 +287,15 @@ int index_add(Index *index, const char *path) {
     else if (st.st_mode & S_IXUSR) mode = 0100755;
     else                            mode = 0100644;
  
-    // Step 4: Update or insert the index entry
+    
     IndexEntry *existing = index_find(index, path);
     if (existing) {
-        // Update existing entry
+        
         existing->hash     = blob_id;
         existing->mtime_sec = (uint64_t)st.st_mtime;
         existing->size      = (uint64_t)st.st_size;
         existing->mode      = mode;
     } else {
-        // Add new entry
         if (index->count >= MAX_INDEX_ENTRIES) return -1;
         IndexEntry *e = &index->entries[index->count++];
         e->hash      = blob_id;
@@ -305,7 +304,5 @@ int index_add(Index *index, const char *path) {
         e->mode      = mode;
         snprintf(e->path, sizeof(e->path), "%s", path);
     }
- 
-    // Step 5: Save index atomically
     return index_save(index);
 }
