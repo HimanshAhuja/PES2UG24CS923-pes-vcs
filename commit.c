@@ -235,6 +235,9 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
     }
  
     if (commit_id_out) *commit_id_out = commit_id;
-    (void)message; (void)commit_id_out;
-    return -1;
+    char hex[HASH_HEX_SIZE + 1];
+    hash_to_hex(&commit_id, hex);
+    printf("[main %.7s] %s\n", hex, message);
+ 
+    return 0;
 }
