@@ -212,6 +212,8 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
     char *space = memchr(buf, ' ', null_byte - buf);
     if (!space) { free(buf); return -1; }
     size_t data_len = (size_t)strtoul(space + 1, NULL, 10);
+    uint8_t *data_start = null_byte + 1;
+    *data_out = malloc(data_len + 1);
     if (!*data_out) { free(buf); return -1; }
     memcpy(*data_out, data_start, data_len);
     ((uint8_t *)*data_out)[data_len] = '\0';
