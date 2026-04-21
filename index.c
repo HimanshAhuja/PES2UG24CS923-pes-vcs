@@ -1,3 +1,11 @@
+// index.c — Staging area implementation
+//
+// Text format of .pes/index (one entry per line, sorted by path):
+//
+//   <mode-octal> <64-char-hex-hash> <mtime-seconds> <size> <path>
+//
+// PROVIDED functions: index_find, index_remove, index_status
+// TODO functions:     index_load, index_save, index_add
 #include "index.h"
 #include <stdio.h>
 #include <stdlib.h>
