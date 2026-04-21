@@ -222,6 +222,19 @@ int commit_create(const char *message, ObjectID *commit_id_out) {
         fprintf(stderr, "error: failed to serialize commit\n");
         return -1;
     }
+    ObjectID commit_id;
+    if (object_write(OBJ_COMMIT, commit_data, commit_len, &commit_id) != 0) {
+        free(commit_data);
+        fprintf(stderr, "error: failed to write commit object\n");
+        return -1;
+    }
+    free(commit_data);
+    if (head_update(&commit_id) != 0) {
+        fprintf(stderr, "error: failed to update HEAD\n");
+        return -1;
+    }
+ 
+    if (commit_id_out) *commit_id_out = commit_id;
     (void)message; (void)commit_id_out;
     return -1;
 }
