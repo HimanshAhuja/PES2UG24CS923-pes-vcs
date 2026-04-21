@@ -203,7 +203,15 @@ int object_read(const ObjectID *id, ObjectType *type_out, void **data_out, size_
         free(buf);
         return -1; 
     }
-    
+    uint8_t *null_byte = memchr(buf, '\0', (size_t)file_size);
+    if (!null_byte) { free(buf); return -1; }
+    if (strncmp((char *)buf, "blob ", 5) == 0)        *type_out = OBJ_BLOB;
+    else if (strncmp((char *)buf, "tree ", 5) == 0)   *type_out = OBJ_TREE;
+    else if (strncmp((char *)buf, "commit ", 7) == 0) *type_out = OBJ_COMMIT;
+    else { free(buf); return -1; }
+    char *space = memchr(buf, ' ', null_byte - buf);
+    if (!space) { free(buf); return -1; }
+    size_t data_len = (size_t)strtoul(space + 1, NULL, 10);
     (void)id; (void)type_out; (void)data_out; (void)len_out;
     return -1;
 }
