@@ -130,9 +130,11 @@ int object_write(ObjectType type, const void *data, size_t len, ObjectID *id_out
 
     char *slash = strrchr(dir, '/');
     if (slash) {
-        *slash = '\0';   // remove filename → keep directory
-        mkdir(dir, 0755);  // create directory (ignore if exists)
-    }
+        *slash = '\0';
+        mkdir(PES_DIR, 0755);
+        mkdir(OBJECTS_DIR, 0755);
+        mkdir(dir, 0755);
+}
 
     char temp_path[600];
     snprintf(temp_path, sizeof(temp_path), "%s.tmp", path);
