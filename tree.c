@@ -8,8 +8,8 @@
 //
 // Example single entry (conceptual):
 //   "100644 hello.txt\0" followed by 32 raw bytes of SHA-256
-
 #include "tree.h"
+#include "index.c"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -130,23 +130,96 @@ int tree_serialize(const Tree *tree, void **data_out, size_t *len_out) {
 //
 // Returns 0 on success, -1 on error.
 int tree_from_index(ObjectID *id_out) {
-    // TODO: Implement recursive tree building
-    // (See Lab Appendix for logical steps)
     Index index;
     if (index_load(&index) != 0) return -1;
- 
-    if (index.count == 0) {
-        // Empty index: create an empty tree
-        Tree empty_tree;
-        empty_tree.count = 0;
-        void *tree_data;
-        size_t tree_len;
-        if (tree_serialize(&empty_tree, &tree_data, &tree_len) != 0) return -1;
-        int rc = object_write(OBJ_TREE, tree_data, tree_len, id_out);
-        free(tree_data);
-        return rc;
+
+    Tree root;
+    root.count = 0;
+
+    char dirs[1024][256];
+    int dir_count = 0;
+
+    for (int i = 0; i < index.count; i++) {
+        const char *path = index.entries[i].path;
+
+        const char *slash = strchr(path, '/');
+
+        if (!slash) {
+            TreeEntry *e = &root.entries[root.count++];
+
+            e->mode = index.entries[i].mode;
+            e->hash = index.entries[i].hash;
+            strcpy(e->name, path);
+        } else {
+            char dirname[256];
+            strncpy(dirname, path, slash - path);
+            dirname[slash - path] = '\0';
+
+            // check if already added
+            int exists = 0;
+            for (int j = 0; j < dir_count; j++) {
+                if (strcmp(dirs[j], dirname) == 0) {
+                    exists = 1;
+                    break;
+                }
+            }
+
+            if (!exists) {
+                strcpy(dirs[dir_count++], dirname);
+            }
+        }
     }
-    qsort(index.entries, (size_t)index.count, sizeof(IndexEntry), compare_index_entries);
-    (void)id_out;
-    return -1;
+
+    for (int i = 0; i < dir_count; i++) {
+        Tree subtree;
+        subtree.count = 0;
+
+        for (int j = 0; j < index.count; j++) {
+            const char *path = index.entries[j].path;
+
+            if (strncmp(path, dirs[i], strlen(dirs[i])) == 0 &&
+                path[strlen(dirs[i])] == '/') {
+
+                const char *subname = path + strlen(dirs[i]) + 1;
+
+                if (strchr(subname, '/')) continue;
+
+                TreeEntry *e = &subtree.entries[subtree.count++];
+
+                e->mode = index.entries[j].mode;
+                e->hash = index.entries[j].hash;
+                strcpy(e->name, subname);
+            }
+        }
+
+        void *subdata;
+        size_t sublen;
+        ObjectID sub_id;
+
+        if (tree_serialize(&subtree, &subdata, &sublen) != 0) return -1;
+
+        if (object_write(OBJ_TREE, subdata, sublen, &sub_id) != 0) {
+            free(subdata);
+            return -1;
+        }
+
+        free(subdata);
+        TreeEntry *e = &root.entries[root.count++];
+        e->mode = MODE_DIR;
+        e->hash = sub_id;
+        strcpy(e->name, dirs[i]);
+    }
+
+    void *data;
+    size_t len;
+
+    if (tree_serialize(&root, &data, &len) != 0) return -1;
+
+    if (object_write(OBJ_TREE, data, len, id_out) != 0) {
+        free(data);
+        return -1;
+    }
+
+    free(data);
+    return 0;
 }
