@@ -206,8 +206,34 @@ int index_load(Index *index) {
 int index_save(const Index *index) {
     // TODO: Implement atomic index saving
     // (See Lab Appendix for logical steps)
-    (void)index;
-    return -1;
+     Index sorted = *index;
+    qsort(sorted.entries, (size_t)sorted.count, sizeof(IndexEntry), compare_entries_by_path);
+ 
+    char tmp_path[256];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", INDEX_FILE);
+ 
+    FILE *f = fopen(tmp_path, "w");
+    if (!f) return -1;
+ 
+    for (int i = 0; i < sorted.count; i++) {
+        const IndexEntry *e = &sorted.entries[i];
+        char hex[HASH_HEX_SIZE + 1];
+        hash_to_hex(&e->hash, hex);
+ 
+        fprintf(f, "%o %s %llu %llu %s\n",
+                e->mode,
+                hex,
+                (unsigned long long)e->mtime_sec,
+                (unsigned long long)e->size,
+                e->path);
+    }
+ 
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+    if (rename(tmp_path, INDEX_FILE) != 0) return -1;
+ 
+    return 0;
 }
 
 // Stage a file for the next commit.
@@ -222,6 +248,64 @@ int index_save(const Index *index) {
 int index_add(Index *index, const char *path) {
     // TODO: Implement file staging
     // (See Lab Appendix for logical steps)
-    (void)index; (void)path;
-    return -1;
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "error: cannot open '%s'\n", path);
+        return -1;
+    }
+ 
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+ 
+    if (file_size < 0) { fclose(f); return -1; }
+ 
+    uint8_t *contents = malloc((size_t)file_size);
+    if (!contents) { fclose(f); return -1; }
+ 
+    if (fread(contents, 1, (size_t)file_size, f) != (size_t)file_size) {
+        fclose(f);
+        free(contents);
+        return -1;
+    }
+    fclose(f);
+ 
+    // Step 2: Write blob to object store
+    ObjectID blob_id;
+    if (object_write(OBJ_BLOB, contents, (size_t)file_size, &blob_id) != 0) {
+        free(contents);
+        return -1;
+    }
+    free(contents);
+ 
+    // Step 3: Get file metadata (mtime, size, mode)
+    struct stat st;
+    if (lstat(path, &st) != 0) return -1;
+ 
+    uint32_t mode;
+    if (S_ISDIR(st.st_mode))       mode = 0040000;
+    else if (st.st_mode & S_IXUSR) mode = 0100755;
+    else                            mode = 0100644;
+ 
+    // Step 4: Update or insert the index entry
+    IndexEntry *existing = index_find(index, path);
+    if (existing) {
+        // Update existing entry
+        existing->hash     = blob_id;
+        existing->mtime_sec = (uint64_t)st.st_mtime;
+        existing->size      = (uint64_t)st.st_size;
+        existing->mode      = mode;
+    } else {
+        // Add new entry
+        if (index->count >= MAX_INDEX_ENTRIES) return -1;
+        IndexEntry *e = &index->entries[index->count++];
+        e->hash      = blob_id;
+        e->mtime_sec = (uint64_t)st.st_mtime;
+        e->size      = (uint64_t)st.st_size;
+        e->mode      = mode;
+        snprintf(e->path, sizeof(e->path), "%s", path);
+    }
+ 
+    // Step 5: Save index atomically
+    return index_save(index);
 }
