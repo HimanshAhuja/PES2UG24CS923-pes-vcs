@@ -194,50 +194,38 @@ int head_update(const ObjectID *new_commit) {
 //
 // Returns 0 on success, -1 on error.
 int commit_create(const char *message, ObjectID *commit_id_out) {
-    // TODO: Implement commit creation
-    // (See Lab Appendix for logical steps)
     ObjectID tree_id;
-    if (tree_from_index(&tree_id) != 0) {
-        fprintf(stderr, "error: failed to build tree from index\n");
-        return -1;
-    }
-    Commit commit;
-    memset(&commit, 0, sizeof(commit));
- 
-    commit.tree = tree_id;
-    commit.timestamp = (uint64_t)time(NULL);
-    snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
-    snprintf(commit.message, sizeof(commit.message), "%s", message);
+
+    if (tree_from_index(&tree_id) != 0) return -1;
     ObjectID parent_id;
-    if (head_read(&parent_id) == 0) {
-        commit.has_parent = 1;
-        commit.parent = parent_id;
-    } else {
-        // No parent — this is the first commit
-        commit.has_parent = 0;
+    int has_parent = (head_read(&parent_id) == 0);
+    
+    Commit c;
+    c.tree = tree_id;
+    c.has_parent = has_parent;
+
+    if (has_parent) {
+        c.parent = parent_id;
     }
-    void *commit_data;
-    size_t commit_len;
-    if (commit_serialize(&commit, &commit_data, &commit_len) != 0) {
-        fprintf(stderr, "error: failed to serialize commit\n");
+
+    snprintf(c.author, sizeof(c.author), "%s", pes_author());
+    c.timestamp = (uint64_t)time(NULL);
+
+    snprintf(c.message, sizeof(c.message), "%s", message);
+
+    void *data;
+    size_t len;
+
+    if (commit_serialize(&c, &data, &len) != 0) return -1;
+
+    if (object_write(OBJ_COMMIT, data, len, commit_id_out) != 0) {
+        free(data);
         return -1;
     }
-    ObjectID commit_id;
-    if (object_write(OBJ_COMMIT, commit_data, commit_len, &commit_id) != 0) {
-        free(commit_data);
-        fprintf(stderr, "error: failed to write commit object\n");
-        return -1;
-    }
-    free(commit_data);
-    if (head_update(&commit_id) != 0) {
-        fprintf(stderr, "error: failed to update HEAD\n");
-        return -1;
-    }
- 
-    if (commit_id_out) *commit_id_out = commit_id;
-    char hex[HASH_HEX_SIZE + 1];
-    hash_to_hex(&commit_id, hex);
-    printf("[main %.7s] %s\n", hex, message);
- 
+
+    free(data);
+
+    if (head_update(commit_id_out) != 0) return -1;
+
     return 0;
 }
