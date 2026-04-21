@@ -196,6 +196,18 @@ int head_update(const ObjectID *new_commit) {
 int commit_create(const char *message, ObjectID *commit_id_out) {
     // TODO: Implement commit creation
     // (See Lab Appendix for logical steps)
+    ObjectID tree_id;
+    if (tree_from_index(&tree_id) != 0) {
+        fprintf(stderr, "error: failed to build tree from index\n");
+        return -1;
+    }
+    Commit commit;
+    memset(&commit, 0, sizeof(commit));
+ 
+    commit.tree = tree_id;
+    commit.timestamp = (uint64_t)time(NULL);
+    snprintf(commit.author, sizeof(commit.author), "%s", pes_author());
+    snprintf(commit.message, sizeof(commit.message), "%s", message);
     (void)message; (void)commit_id_out;
     return -1;
 }
