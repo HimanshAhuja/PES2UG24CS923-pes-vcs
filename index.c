@@ -140,9 +140,58 @@ static int compare_entries_by_path(const void *a, const void *b) {
 int index_load(Index *index) {
     // TODO: Implement index loading
     // (See Lab Appendix for logical steps)
-    (void)index;
-    return -1;
+    index->count = 0;
+ 
+    FILE *f = fopen(INDEX_FILE, "r");
+    if (!f) {
+        // File doesn't exist yet — empty index is valid
+        return 0;
+    }
+ 
+    char line[1024];
+    while (fgets(line, sizeof(line), f)) {
+        // Strip newline
+        line[strcspn(line, "\r\n")] = '\0';
+        if (line[0] == '\0') continue; // Skip blank lines
+ 
+        if (index->count >= MAX_INDEX_ENTRIES) {
+            fclose(f);
+            return -1;
+        }
+ 
+        IndexEntry *e = &index->entries[index->count];
+ 
+        // Format: <mode-octal> <64-char-hex-hash> <mtime> <size> <path>
+        char hex[HASH_HEX_SIZE + 1];
+        uint64_t mtime;
+        uint64_t size;
+        char path[512];
+ 
+        if (sscanf(line, "%o %64s %llu %llu %511s",
+                   &e->mode, hex,
+                   (unsigned long long *)&mtime,
+                   (unsigned long long *)&size,
+                   path) != 5) {
+            fclose(f);
+            return -1;
+        }
+ 
+        if (hex_to_hash(hex, &e->hash) != 0) {
+            fclose(f);
+            return -1;
+        }
+ 
+        e->mtime_sec = mtime;
+        e->size      = size;
+        snprintf(e->path, sizeof(e->path), "%s", path);
+ 
+        index->count++;
+    }
+ 
+    fclose(f);
+    return 0;
 }
+
 
 // Save the index to .pes/index atomically.
 //
